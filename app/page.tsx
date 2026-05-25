@@ -118,12 +118,13 @@ const css = `
   .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;min-height:380px}
   .kanban::-webkit-scrollbar{height:4px}
   .kanban::-webkit-scrollbar-thumb{background:var(--paper-3);border-radius:4px}
-  .kol{background:var(--paper-2);border-radius:12px;padding:12px;flex:0 0 205px;display:flex;flex-direction:column}
-  .kol-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  .kol-nm{font-size:10.5px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em}
-  .kol-ct{background:#fff;color:var(--ink-4);font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;border:1px solid var(--paper-3)}
+  .kol{background:var(--paper-2);border-radius:12px;padding:12px;flex:0 0 205px;display:flex;flex-direction:column;transition:background-color .2s}
+  .kol.drag-over{background:var(--moss-6);border:2px dashed var(--moss-4)}
   .kcard{background:#fff;border-radius:8px;border:1px solid var(--paper-3);padding:12px;margin-bottom:7px;cursor:pointer;transition:all .16s;box-shadow:var(--s1)}
   .kcard:hover{border-color:var(--moss-5);box-shadow:var(--s2);transform:translateY(-1px)}
+  .kcard.dragging{opacity:.5;transform:scale(.95)}
+  .kcard[draggable=true]{cursor:grab}
+  .kcard[draggable=true]:active{cursor:grabbing}
   .kc-nm{font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:3px;line-height:1.3}
   .kc-cl{font-size:11px;color:var(--ink-4);margin-bottom:7px}
   .progress{height:5px;border-radius:3px;background:var(--paper-3);overflow:hidden}
@@ -758,11 +759,32 @@ function PipelinePage({go}: {go:(p:string)=>void}) {
   const [view, setView] = useState('kanban');
   const [search, setSearch] = useState('');
   const [stageF, setStageF] = useState('Todos');
-  const filtered = OPPS.filter(o => {
+  const [opps, setOpps] = useState(OPPS);
+  const [draggedOpp, setDraggedOpp] = useState<{id:string,fromStage:string}|null>(null);
+  const filtered = opps.filter(o => {
     const ms = stageF==='Todos' || o.stage===stageF;
     const mq = o.name.toLowerCase().includes(search.toLowerCase()) || o.client.toLowerCase().includes(search.toLowerCase());
     return ms && mq;
   });
+
+  const handleDragStart = (oppId: string, stage: string) => {
+    setDraggedOpp({id: oppId, fromStage: stage});
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (targetStage: string) => {
+    if (!draggedOpp) return;
+    const updatedOpps = opps.map(o => 
+      o.id === draggedOpp.id && o.stage === draggedOpp.fromStage
+        ? {...o, stage: targetStage}
+        : o
+    );
+    setOpps(updatedOpps);
+    setDraggedOpp(null);
+  };
   return (
     <div>
       <div className="flex-b mb20">
@@ -793,11 +815,17 @@ function PipelinePage({go}: {go:(p:string)=>void}) {
             const cards = filtered.filter(o=>o.stage===stage);
             const tot = cards.reduce((a,o)=>a+o.value,0);
             return (
-              <div key={stage} className="kol">
+              <div key={stage} className={`kol ${draggedOpp ? 'drag-over' : ''}`} onDragOver={handleDragOver} onDrop={() => handleDrop(stage)}>
                 <div className="kol-hd"><span className="kol-nm">{STAGE_LABELS[stage]}</span><span className="kol-ct">{cards.length}</span></div>
                 {tot>0 && <div className="txs tmuted mb8" style={{fontWeight:600}}>R$ {(tot/1000).toFixed(0)}k</div>}
                 {cards.map(o=>(
-                  <div key={o.id} className="kcard">
+                  <div 
+                    key={o.id} 
+                    className={`kcard ${draggedOpp?.id === o.id ? 'dragging' : ''}`}
+                    draggable
+                    onDragStart={() => handleDragStart(o.id, o.stage)}
+                    onDragEnd={() => setDraggedOpp(null)}
+                  >
                     <div className="kc-nm">{o.name}</div>
                     <div className="kc-cl">{o.client}</div>
                     <div className="flex-b mb6"><span className="fw6" style={{fontSize:13}}>R$ {(o.value/1000).toFixed(0)}k</span><MBadge m={o.margin}/></div>
