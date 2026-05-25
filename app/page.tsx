@@ -868,6 +868,7 @@ function ProposalsPage() {
   const [sel, setSel] = useState<string|null>(null);
   const [aiText, setAiText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('preview');
   const opp = sel ? OPPS.find(o=>o.id===sel) : null;
 
@@ -876,6 +877,43 @@ function ProposalsPage() {
     await new Promise(r => setTimeout(r, 1000));
     setAiText(`A Mama Flora apresenta esta proposta desenvolvida com dedicação exclusiva para ${o.client}. Com mais de uma década de excelência em paisagismo premium, nossa equipe selecionou cada elemento para criar uma experiência botânica singular.\n\nO projeto ${o.name} representa um investimento de R$ ${o.value.toLocaleString('pt-BR')} na transformação de um espaço comum em um ambiente vivo, sofisticado e duradouro.\n\nEstamos prontos para iniciar. Vamos transformar este espaço juntos.`);
     setAiLoading(false);
+  };
+
+  const downloadPDF = async (o: Opp, presentation?: string) => {
+    setPdfLoading(true);
+    try {
+      const res = await fetch('/api/proposal-pdf', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          id: o.id,
+          name: o.name,
+          client: o.client,
+          value: o.value,
+          margin: o.margin,
+          products: o.products,
+          date: o.date,
+          stage: o.stage,
+          type: o.type,
+          presentationText: presentation || '',
+        }),
+      });
+      if (!res.ok) throw new Error('Falha ao gerar PDF');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proposta-${o.id}-mama-flora.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch(e) {
+      console.error('[PDF]', e);
+      alert('Erro ao gerar o PDF. Tente novamente.');
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const propTabs = ['preview','visual','financeiro','historico'];
@@ -889,8 +927,11 @@ function ProposalsPage() {
           <div className="flex" style={{gap:7,alignItems:'center'}}>
             <button className="btn btn-s btn-sm"><Ico n="edit" s={13}/>Editar</button>
             <button className="btn btn-s btn-sm"><Ico n="send" s={13}/>Enviar</button>
-            <button className="btn btn-gold btn-sm" disabled={aiLoading}>
-              <span style={{display:'flex',alignItems:'center',gap:6}}><Ico n="download" s={13}/>PDF</span>
+            <button className="btn btn-gold btn-sm" disabled={pdfLoading} onClick={()=>opp && downloadPDF(opp, aiText)}>
+              {pdfLoading
+                ? <><div className="spinner"/>Gerando PDF...</>
+                : <><Ico n="download" s={13}/>Baixar PDF</>
+              }
             </button>
           </div>
         </div>
@@ -1055,7 +1096,7 @@ function ProposalsPage() {
                   <td><SBadge s={o.stage}/></td>
                   <td><div className="flex" style={{gap:4,flexWrap:'wrap'}}>{o.products.slice(0,2).map(p=><span key={p} className="chip" style={{fontSize:10}}>{p}</span>)}{o.products.length>2&&<span className="txs tmuted">+{o.products.length-2}</span>}</div></td>
                   <td className="txs tmuted">{o.date}</td>
-                  <td><div className="flex" style={{gap:4}}><button className="btn btn-g btn-xs" onClick={()=>{setSel(o.id);setActiveTab('preview');}}><Ico n="eye" s={11}/>Ver</button><button className="btn btn-g btn-xs"><Ico n="download" s={11}/>PDF</button></div></td>
+                  <td><div className="flex" style={{gap:4}}><button className="btn btn-g btn-xs" onClick={()=>{setSel(o.id);setActiveTab('preview');}}><Ico n="eye" s={11}/>Ver</button><button className="btn btn-gold btn-xs" disabled={pdfLoading} onClick={()=>downloadPDF(o)}><Ico n="download" s={11}/>PDF</button></div></td>
                 </tr>
               ))}
             </tbody>
